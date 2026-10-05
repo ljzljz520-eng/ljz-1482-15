@@ -1,13 +1,86 @@
 version: "3.9"
+
 services:
-  frontend:
-    build: ./frontend
-    container_name: park-frontend
+  db:
+    image: postgres:16-alpine
+    container_name: timeline-db
+    environment:
+      POSTGRES_USER: timeline
+      POSTGRES_PASSWORD: timeline
+      POSTGRES_DB: timeline
     ports:
-      - "3000:80"
+      - "5432:5432"
+    volumes:
+      - timeline-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U timeline"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
     restart: unless-stopped
     networks:
-      - park-net
+      - timeline-net
+
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: timeline-backend
+    command: ["./docker-entrypoint.sh", "api"]
+    environment:
+      DATABASE_URL: postgresql://timeline:timeline@db:5432/timeline?schema=public
+      POSTGRES_HOST: db
+      POSTGRES_PORT: "5432"
+      POSTGRES_USER: timeline
+      NODE_ENV: production
+      PORT: "8000"
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - timeline-net
+
+  worker:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: timeline-worker
+    command: ["./docker-entrypoint.sh", "worker"]
+    environment:
+      DATABASE_URL: postgresql://timeline:timeline@db:5432/timeline?schema=public
+      POSTGRES_HOST: db
+      POSTGRES_PORT: "5432"
+      POSTGRES_USER: timeline
+      NODE_ENV: production
+      WORKER_POLL_MS: "1200"
+    depends_on:
+      db:
+        condition: service_healthy
+      backend:
+        condition: service_started
+    restart: unless-stopped
+    networks:
+      - timeline-net
+
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    container_name: timeline-frontend
+    ports:
+      - "3000:80"
+    depends_on:
+      - backend
+    restart: unless-stopped
+    networks:
+      - timeline-net
+
+volumes:
+  timeline-pgdata:
+
 networks:
-  park-net:
+  timeline-net:
     driver: bridge

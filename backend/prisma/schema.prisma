@@ -1,0 +1,260 @@
+// 多轨时间线编排系统 —— 规范化数据模型
+// 关键完整性：片段/转场/关键点/字幕/音频全部使用真实外键（onDelete: Restrict），
+// 数据库层拒绝任何悬空引用；时间字段全部为 Int（主时间线 tick 整数）。
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String    @id @default(cuid())
+  name      String
+  color     String    @default("#165DFF")
+  createdAt DateTime  @default(now())
+  projects  Project[]
+  history   HistoryEntry[]
+  mutations ClientMutation[]
+}
+
+model Project {
+  id              String   @id @default(cuid())
+  name            String
+  ownerId         String
+  owner           User     @relation(fields: [ownerId], references: [id])
+  currentRevision Int      @default(0)
+  timebase        BigInt   @default(1000000000)
+  rateNum         Int      @default(25)
+  rateDen         Int      @default(1)
+  exportStart     BigInt   @default(0)
+  exportEnd       BigInt?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  assets     Asset[]
+  tracks     Track[]
+  clips      Clip[]
+  transitions Transition[]
+  keyframes  Keyframe[]
+  markers    Marker[]
+  captions   CaptionAnchor[]
+  audioClips AudioClip[]
+  freezes    FrozenTimeline[]
+  history    HistoryEntry[]
+  jobs       RenderJob[]
+  mutations  ClientMutation[]
+
+  @@index([ownerId])
+}
+
+model Asset {
+  id        String   @id @default(cuid())
+  projectId String
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  kind      String   // video | audio | image
+  name      String
+  rateNum   Int
+  rateDen   Int
+  duration  BigInt   // 源 tick
+  width     Int?
+  height    Int?
+  status    String   @default("active") // active | retired（退役不删除，冻结版本仍可引用）
+  createdAt DateTime @default(now())
+
+  clips      Clip[]
+  audioClips AudioClip[]
+
+  @@unique([projectId, id])
+  @@index([projectId])
+}
+
+model Track {
+  id        String   @id
+  projectId String
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  kind      String   // video | audio
+  name      String
+  position  Int      @default(0)
+  locked    Boolean  @default(false)
+  clips     Clip[]
+  audioClips AudioClip[]
+  transitions Transition[]
+
+  @@unique([projectId, id])
+  @@index([projectId])
+}
+
+model Clip {
+  id        String   @id
+  projectId String
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  trackId   String
+  track     Track    @relation(fields: [trackId, projectId], references: [id, projectId], onDelete: Restrict)
+  assetId   String
+  asset     Asset    @relation(fields: [assetId, projectId], references: [id, projectId], onDelete: Restrict)
+  start     BigInt
+  duration  BigInt
+  inPoint   BigInt
+  outPoint  BigInt
+  position  Int      @default(0)
+
+  keyframesFrom  Keyframe[]    @relation("FromClip")
+  transitionsFrom Transition[] @relation("FromClipT")
+  transitionsTo   Transition[] @relation("ToClipT")
+  markers         Marker[]
+  captions        CaptionAnchor[]
+
+  @@unique([projectId, id])
+  @@unique([projectId, trackId, id])
+  @@unique([projectId, assetId, id])
+  @@index([projectId])
+}
+
+model Transition {
+  id         String  @id
+  projectId  String
+  project    Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  trackId    String
+  track      Track   @relation(fields: [trackId, projectId], references: [id, projectId], onDelete: Restrict)
+  fromClipId String
+  fromClip   Clip    @relation("FromClipT", fields: [fromClipId, projectId], references: [id, projectId], onDelete: Restrict)
+  toClipId   String
+  toClip     Clip    @relation("ToClipT", fields: [toClipId, projectId], references: [id, projectId], onDelete: Restrict)
+  overlap    BigInt
+  kind       String  @default("dissolve")
+
+  @@unique([projectId, id])
+  @@unique([projectId, fromClipId, toClipId])
+  @@index([projectId])
+}
+
+model Keyframe {
+  id        String  @id
+  projectId String
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  clipId    String
+  clip      Clip    @relation("FromClip", fields: [clipId, projectId], references: [id, projectId], onDelete: Restrict)
+  offset    BigInt
+  property  String
+  value     Float
+
+  @@unique([projectId, id])
+  @@unique([projectId, clipId, id])
+  @@index([projectId])
+}
+
+model Marker {
+  id        String  @id
+  projectId String
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  clipId    String?
+  clip      Clip?   @relation(fields: [clipId, projectId], references: [id, projectId], onDelete: Restrict)
+  tick      BigInt
+  label     String
+  mode      String  @default("absolute") // clip | absolute
+
+  @@unique([projectId, id])
+  @@index([projectId])
+}
+
+model CaptionAnchor {
+  id           String  @id
+  projectId    String
+  project      Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  clipId       String?
+  clip         Clip?   @relation(fields: [clipId, projectId], references: [id, projectId], onDelete: Restrict)
+  text         String
+  mode         String  // clip | absolute
+  offset       BigInt   @default(0)
+  absoluteTick BigInt   @default(0)
+
+  @@unique([projectId, id])
+  @@index([projectId])
+}
+
+model AudioClip {
+  id        String  @id
+  projectId String
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  trackId   String
+  track     Track   @relation(fields: [trackId, projectId], references: [id, projectId], onDelete: Restrict)
+  assetId   String
+  asset     Asset   @relation(fields: [assetId, projectId], references: [id, projectId], onDelete: Restrict)
+  start     BigInt
+  duration  BigInt
+  inPoint   BigInt
+  gain      Float   @default(1)
+
+  @@unique([projectId, id])
+  @@index([projectId])
+}
+
+model FrozenTimeline {
+  id        String   @id @default(cuid())
+  projectId String
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  revision  Int
+  label     String
+  doc       Json
+  assets    Json
+  createdAt DateTime @default(now())
+  jobs      RenderJob[]
+
+  @@index([projectId])
+}
+
+model RenderJob {
+  id        String   @id @default(cuid())
+  projectId String
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  frozenId  String
+  frozen    FrozenTimeline @relation(fields: [frozenId], references: [id], onDelete: Restrict)
+  revision  Int
+  status    String   @default("queued") // queued | running | succeeded | failed
+  kind      String   @default("preview") // edl | preview
+  result    String?
+  error     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([projectId, status])
+  @@index([status])
+}
+
+model HistoryEntry {
+  id          String   @id @default(cuid())
+  projectId   String
+  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  userId      String
+  user        User     @relation(fields: [userId], references: [id])
+  revision    Int
+  summary     String
+  patch       Json
+  inverse     Json
+  undoneById  String?
+  createdAt   DateTime @default(now())
+
+  @@unique([projectId, revision])
+  @@index([projectId, createdAt])
+}
+
+// 客户端幂等键：保存响应丢失时安全重试，绝不重复应用同一操作
+model ClientMutation {
+  id         String   @id @default(cuid())
+  projectId  String
+  project    Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  userId     String
+  user       User     @relation(fields: [userId], references: [id])
+  clientId   String   // 客户端生成的幂等 id
+  status     String   // applied | conflict | rejected
+  newRevision Int?
+  response   Json
+  createdAt  DateTime @default(now())
+
+  @@unique([projectId, clientId])
+  @@index([projectId])
+}

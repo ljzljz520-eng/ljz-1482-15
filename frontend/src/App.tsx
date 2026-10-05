@@ -1,8 +1,7 @@
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
-import Layout from "./components/Layout";
-import AudioVisual from "./pages/AudioVisual";
-import Timeline from "./pages/Timeline";
-import ParkOverview from "./pages/ParkOverview";
+import EditorPage from "./pages/EditorPage";
+import RendersPage from "./pages/RendersPage";
+import AssetsPage from "./pages/AssetsPage";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { Toaster } from "react-hot-toast";
 
@@ -10,15 +9,13 @@ const App = () => {
   return (
     <BrowserRouter>
       <ErrorBoundary>
-        <Layout>
-          <Routes>
-            <Route path="/" element={<ParkOverview />} />
-            <Route path="/audiovisual" element={<AudioVisual />} />
-            <Route path="/timeline" element={<Timeline />} />
-            <Route path="*" element={<Navigate to="/" replace />} />
-          </Routes>
-          <Toaster position="top-right" />
-        </Layout>
+        <Routes>
+          <Route path="/" element={<EditorPage />} />
+          <Route path="/assets" element={<AssetsPage />} />
+          <Route path="/renders" element={<RendersPage />} />
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+        <Toaster position="top-right" />
       </ErrorBoundary>
     </BrowserRouter>
   );
