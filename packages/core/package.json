@@ -1,0 +1,29 @@
+{
+  "name": "@timeline/core",
+  "version": "1.0.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./hashNode": {
+      "types": "./dist/hashNode.d.ts",
+      "import": "./dist/hashNode.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "tsx --test src/test/*.test.ts"
+  },
+  "devDependencies": {
+    "tsx": "^4.19.2",
+    "@types/node": "^20.14.0",
+    "typescript": "^5.5.4"
+  }
+}

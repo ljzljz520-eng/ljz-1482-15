@@ -1,0 +1,116 @@
+// Prisma schema —— 多轨时间线协作后端
+// 时间线文档以 JSON 存储（其所有时间字段为整数 tick，由 @timeline/core 保证），
+// 引用完整性由应用层 + PostgreSQL 触发器双重保证（拒绝悬空素材引用）。
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  admin
+  editor
+}
+
+model User {
+  id           String   @id @default(cuid())
+  username     String   @unique
+  displayName  String
+  passwordHash String
+  role         Role     @default(editor)
+  createdAt    DateTime @default(now())
+
+  undoEntries    UndoEntry[]
+  renderJobs     RenderJob[]
+  idempotentReqs IdempotentRequest[]
+}
+
+model Media {
+  id         String   @id @default(cuid())
+  name       String
+  kind       String // video | audio | image
+  fps        String // 有理数帧率，如 30000/1001
+  duration   Int // 整数 tick
+  sampleRate Int?
+  width      Int?
+  height     Int?
+  retired    Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  clipsRef Json? // 仅用于文档；真正约束见 timeline_doc_integrity 触发器
+}
+
+model Timeline {
+  id        String   @id @default(cuid())
+  name      String
+  doc       Json
+  revision  Int      @default(1)
+  docHash   String
+  frozen    Boolean  @default(false) // 冻结后文档不可再编辑（历史归档）
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  undoEntries UndoEntry[]
+  renderJobs  RenderJob[]
+}
+
+model UndoEntry {
+  id         String  @id @default(cuid())
+  timelineId String
+  userId     String
+  seq        Int // 用户在该时间线上的操作序号（单调递增）
+  label      String
+  inverse    Json // 逆操作（Op）
+  // 应用该逆操作必须满足的前提：操作执行前的文档哈希与 revision
+  baseHash   String
+  baseRevision Int
+  createdAt  DateTime @default(now())
+
+  timeline Timeline @relation(fields: [timelineId], references: [id], onDelete: Cascade)
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([timelineId, userId, seq])
+  @@index([timelineId, userId])
+}
+
+model RenderJob {
+  id         String   @id @default(cuid())
+  timelineId String
+  userId     String
+  status     String   @default("queued") // queued | running | done | failed
+  progress   Int      @default(0)
+  // 冻结快照：创建任务时固化的不可变文档 + 基于同一时间模型的导出 tick 范围
+  snapshot   Json
+  exportStart Int
+  exportEnd   Int
+  fps         String
+  resultUrl   String?
+  message     String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  startedAt   DateTime?
+  finishedAt  DateTime?
+
+  timeline Timeline @relation(fields: [timelineId], references: [id])
+  user     User     @relation(fields: [userId], references: [id])
+
+  @@index([timelineId])
+}
+
+model IdempotentRequest {
+  id         String   @id @default(cuid())
+  key        String   @unique
+  userId     String
+  method     String
+  path       String
+  statusCode Int
+  response   Json
+  createdAt  DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}

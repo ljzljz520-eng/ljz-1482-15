@@ -1,4 +1,4 @@
-import { Link, useLocation } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { ReactNode, useMemo } from "react";
 import { useUIStore } from "@/store/uiStore";
 import clsx from "clsx";
@@ -6,8 +6,47 @@ import clsx from "clsx";
 const navItems = [
   { path: "/", label: "公园总览" },
   { path: "/audiovisual", label: "视听体验" },
-  { path: "/timeline", label: "时间轴" }
+  { path: "/timeline", label: "多轨剪辑" }
 ];
+
+const UserChip = () => {
+  const nav = useNavigate();
+  const raw = localStorage.getItem("tl_user");
+  if (!raw) {
+    return (
+      <Link
+        to="/login"
+        className="hidden sm:inline-flex px-3 py-1.5 rounded-full text-xs font-medium text-white bg-gradient-to-r from-primary to-accent hover:opacity-90 transition"
+      >
+        登录剪辑台
+      </Link>
+    );
+  }
+  try {
+    const user = JSON.parse(raw) as { displayName: string; role: string };
+    return (
+      <div className="hidden sm:flex items-center gap-2">
+        <span className="px-2.5 py-1 rounded-full bg-slate-100 text-xs text-slate-600">
+          {user.displayName}
+          <span className="ml-1 text-slate-400">{user.role === "admin" ? "管理员" : "剪辑师"}</span>
+        </span>
+        <button
+          onClick={() => {
+            localStorage.removeItem("tl_token");
+            localStorage.removeItem("tl_user");
+            localStorage.removeItem("tl_role");
+            nav("/login");
+          }}
+          className="text-xs text-slate-400 hover:text-rose-500 transition"
+        >
+          退出
+        </button>
+      </div>
+    );
+  } catch {
+    return null;
+  }
+};
 
 const Layout = ({ children }: { children: ReactNode }) => {
   const { pathname } = useLocation();
@@ -45,6 +84,7 @@ const Layout = ({ children }: { children: ReactNode }) => {
             ))}
           </nav>
           <div className="flex items-center gap-3">
+            <UserChip />
             <button
               onClick={toggleMenu}
               className="md:hidden inline-flex items-center justify-center h-10 w-10 rounded-full border border-slate-200 hover:border-primary hover:text-primary transition"

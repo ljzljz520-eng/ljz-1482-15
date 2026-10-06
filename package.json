@@ -1,0 +1,16 @@
+{
+  "name": "yunxi-timeline-studio",
+  "private": true,
+  "version": "1.0.0",
+  "workspaces": [
+    "packages/core",
+    "backend",
+    "frontend"
+  ],
+  "scripts": {
+    "build:core": "npm run build -w @timeline/core",
+    "test:core": "npm run test -w @timeline/core",
+    "build:backend": "npm run build -w backend",
+    "build:frontend": "npm run build -w frontend"
+  }
+}

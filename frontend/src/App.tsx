@@ -3,6 +3,8 @@ import Layout from "./components/Layout";
 import AudioVisual from "./pages/AudioVisual";
 import Timeline from "./pages/Timeline";
 import ParkOverview from "./pages/ParkOverview";
+import Login from "./pages/Login";
+import RequireAuth from "./components/RequireAuth";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { Toaster } from "react-hot-toast";
 
@@ -14,7 +16,15 @@ const App = () => {
           <Routes>
             <Route path="/" element={<ParkOverview />} />
             <Route path="/audiovisual" element={<AudioVisual />} />
-            <Route path="/timeline" element={<Timeline />} />
+            <Route path="/login" element={<Login />} />
+            <Route
+              path="/timeline"
+              element={
+                <RequireAuth>
+                  <Timeline />
+                </RequireAuth>
+              }
+            />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
           <Toaster position="top-right" />
